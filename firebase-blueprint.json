@@ -1,0 +1,117 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with address and role.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "address": {
+          "type": "object",
+          "properties": {
+            "street": { "type": "string" },
+            "city": { "type": "string" },
+            "state": { "type": "string" },
+            "zipCode": { "type": "string" }
+          }
+        },
+        "role": { "type": "string", "enum": ["admin", "client"] }
+      },
+      "required": ["uid", "email"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Streetwear clothing item.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "category": { "type": "string" },
+        "sizes": { "type": "array", "items": { "type": "string" } },
+        "colors": { "type": "array", "items": { "type": "string" } },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "stock": { "type": "integer" },
+        "rating": { "type": "number" },
+        "reviews": { "type": "array", "items": { "type": "object" } }
+      },
+      "required": ["name", "price", "category"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order history.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "object" } },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "shipped", "delivered", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "address": { "type": "object" }
+      },
+      "required": ["userId", "items", "total", "status", "createdAt"]
+    },
+    "Address": {
+      "title": "Address",
+      "description": "User shipping address.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "street": { "type": "string" },
+        "number": { "type": "string" },
+        "neighborhood": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "zipCode": { "type": "string" },
+        "type": { "type": "string", "enum": ["Casa", "Trabalho", "Outro"] },
+        "isDefault": { "type": "boolean" }
+      },
+      "required": ["userId", "street", "number", "neighborhood", "city", "state", "zipCode"]
+    },
+    "StockMovement": {
+      "title": "Stock Movement",
+      "description": "History of stock entries and exits.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "type": { "type": "string", "enum": ["entry", "exit"] },
+        "quantity": { "type": "integer" },
+        "value": { "type": "number" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "productName", "type", "quantity", "value", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Product catalog."
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders."
+    },
+    "/addresses/{addressId}": {
+      "schema": "Address",
+      "description": "User shipping addresses."
+    },
+    "/stock_movements/{movementId}": {
+      "schema": "StockMovement",
+      "description": "Stock movement history."
+    }
+  }
+}

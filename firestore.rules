@@ -1,0 +1,199 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - email: string (required, email format, immutable)
+    //   - displayName: string (max 50)
+    //   - photoURL: string (valid URL)
+    //   - address: map (optional)
+    //   - role: string (enum: admin, client, immutable for non-admin)
+    //
+    // Collection: products
+    // Document ID: {productId}
+    // Fields:
+    //   - id: string
+    //   - name: string (required, max 100)
+    //   - description: string (max 1000)
+    //   - price: number (required, positive)
+    //   - discountPrice: number (optional, positive)
+    //   - category: string (required, max 50)
+    //   - sizes: list (max 10 items)
+    //   - colors: list (max 10 items)
+    //   - images: list (max 5 items, valid URLs)
+    //   - stock: number (integer, >= 0)
+    //   - rating: number (0-5)
+    //   - reviews: list (max 100 items)
+    //
+    // Collection: orders
+    // Document ID: {orderId}
+    // Fields:
+    //   - id: string
+    //   - userId: string (required, immutable)
+    //   - items: list (required, max 20 items)
+    //   - total: number (required, positive)
+    //   - status: string (required, enum)
+    //   - createdAt: timestamp (required, immutable)
+    //   - address: map (required)
+    //
+    // Collection: addresses
+    // Document ID: {addressId}
+    // Fields:
+    //   - id: string
+    //   - userId: string (required, immutable)
+    //   - street: string (required)
+    //   - number: string (required)
+    //   - neighborhood: string (required)
+    //   - city: string (required)
+    //   - state: string (required)
+    //   - zipCode: string (required)
+    //   - type: string (enum: Casa, Trabalho, Outro)
+    //   - isDefault: bool
+    //
+    // Collection: test
+    // Document ID: connection
+    // Fields: none
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "junsouzamb324@gmail.com" && request.auth.token.email_verified == true ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'address', 'role']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             (data.role in ['admin', 'client']) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 50)) &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL));
+    }
+
+    function isValidProduct(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'description', 'price', 'discountPrice', 'category', 'sizes', 'colors', 'images', 'stock', 'rating', 'reviews']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.price is number && data.price >= 0 &&
+             data.category is string && data.category.size() > 0 &&
+             (!('description' in data) || (data.description is string && data.description.size() < 1000)) &&
+             (!('stock' in data) || (data.stock is int && data.stock >= 0)) &&
+             (!('images' in data) || (data.images is list && data.images.size() <= 5));
+    }
+
+    function isValidOrder(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'items', 'total', 'status', 'createdAt', 'address']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.items is list && data.items.size() > 0 && data.items.size() <= 20 &&
+             data.total is number && data.total >= 0 &&
+             data.status in ['pending', 'shipped', 'delivered', 'cancelled'] &&
+             data.createdAt is timestamp &&
+             data.address is map;
+    }
+
+    function isValidAddress(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'street', 'number', 'neighborhood', 'city', 'state', 'zipCode', 'type', 'isDefault']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.street is string && data.street.size() > 0 &&
+             data.number is string && data.number.size() > 0 &&
+             data.neighborhood is string && data.neighborhood.size() > 0 &&
+             data.city is string && data.city.size() > 0 &&
+             data.state is string && data.state.size() > 0 &&
+             data.zipCode is string && data.zipCode.size() > 0 &&
+             (!('type' in data) || (data.type in ['Casa', 'Trabalho', 'Outro'])) &&
+             (!('isDefault' in data) || (data.isDefault is bool));
+    }
+
+    function isValidStockMovement(data) {
+      return hasOnlyAllowedFields(['id', 'productId', 'productName', 'type', 'quantity', 'value', 'reason', 'createdAt']) &&
+             data.productId is string && data.productId.size() > 0 &&
+             data.productName is string && data.productName.size() > 0 &&
+             data.type in ['entry', 'exit'] &&
+             data.quantity is int && data.quantity > 0 &&
+             data.value is number && data.value >= 0 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'client' || isAdmin());
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && 
+                    (request.resource.data.role == resource.data.role || isAdmin()) &&
+                    request.resource.data.uid == resource.data.uid &&
+                    request.resource.data.email == resource.data.email;
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() && isValidProduct(request.resource.data);
+    }
+
+    match /orders/{orderId} {
+      allow list: if isAuthenticated() && (request.auth.uid != null);
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && 
+                    isValidOrder(request.resource.data);
+      allow update: if isAdmin() && isValidOrder(request.resource.data) && 
+                    request.resource.data.userId == resource.data.userId &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /addresses/{addressId} {
+      allow list: if isAuthenticated() && (request.auth.uid != null);
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && 
+                    isValidAddress(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && 
+                    isValidAddress(request.resource.data) &&
+                    request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /stock_movements/{movementId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidStockMovement(request.resource.data);
+      allow update, delete: if false; // History should be immutable
+    }
+
+    match /test/{docId} {
+      allow read: if true;
+    }
+  }
+}
